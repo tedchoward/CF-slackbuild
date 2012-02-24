@@ -1,0 +1,208 @@
+#!/bin/sh
+# Copyright 2012 Ted C. Howard <ted@tedchoward.com>
+# All Rights Reserved
+#   Permission to use, copy, modify, and distribute this software for
+#   any purpose with or without fee is hereby granted, provided that
+#   the above copyright notice and this permission notice appear in all
+#   copies.
+#
+#   THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESSED OR IMPLIED
+#   WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+#   MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
+#   IN NO EVENT SHALL THE AUTHORS AND COPYRIGHT HOLDERS AND THEIR
+#   CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+#   SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+#   LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF
+#   USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+#   ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+#   OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
+#   OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+#   SUCH DAMAGE.
+# -----------------------------------------------------------------------------
+#
+# Slackware SlackBuild script
+# ===========================
+# By:         Ted C. Howard <ted@tedchoward.com>
+# For:        CF
+# Descr:      CFLite
+# URL:        http://opensource.apple.com/
+# Needs:      icu4c, llvm, clang, BlocksRuntime
+# Changelog:
+# 635.19-1:    24/Feb/2012 by Ted C. Howard <ted@tedchoward.com>
+#             * Initial build.
+#
+# Run 'sh CF.SlackBuild' to build a Slackware package.
+# The package (.txz) and .txt file as well as build logs are created in /tmp .
+# Install it using 'installpkg'
+#
+# -----------------------------------------------------------------------------
+
+# Set initial variables:
+
+PRGNAM=CF
+VERSION=${VERSION:-635.19}
+BUILD=${BUILD:-1}
+# 'make' can run jobs in parallel for added speed. The number should be higher
+# than the number of cores/virtual CPUs in your system:
+NUMJOBS=${NUMBJOBS:" -j4 "}
+# The TAG is a unique identifier for all your Slackware packages.
+# Use your initials as the value for TAG for instance.
+TAG=${TAG:-_ted}
+
+DOCS="APPLE_LICENSE README_CFLITE"
+
+SRCDIR=$(cd $(dirname $0); pwd)
+TMP=${TMP:-/tmp/build}
+PKG=$TMP/package-$PRGNAM
+OUTPUT=${OUTPUT:-/tmp}
+
+#Input URL: http://opensource.apple.com/tarballs/CF/CF-635.19.tar.gz
+SOURCE="$SRCDIR/${PRGNAM}-${VERSION}.tar.gz"
+SRCURL="http://opensource.apple.com/tarballs/${PRGNAM}/${PRGNAM}-${VERSION}.tar.gz"
+
+##
+## --- with a little luck, you won't have to edit below this point --- ##
+##
+
+# Automatically determine the architecture we're building on:
+if [ -z "$ARCH" ]; then
+  case "$( uname -m )" in
+    i?86) export ARCH=i486 ;;
+    arm*) export ARCH=arm ;;
+       *) export ARCH=$( uname -m ) ;;
+  esac
+fi
+
+case "$ARCH" in
+  i486)   SLKCFLAGS="-O2 -march=i486 -mtune=i686"
+          SLKLDFLAGS=""; LIBDIRSUFFIX=""
+          ;;
+  x86_64) SLKCFLAGS="-O2 -fPIC"
+          SLKLDFLAGS="-L/usr/lib64"; LIBDIRSUFFIX="64"
+          ;;
+  *)      SLKCFLAGS="-O2"
+          SLKLDFLAGS=""; LIBDIRSUFFIX=""
+esac
+
+# Exit the script on errors
+set -e
+trap 'echo "$0 FAILED at line ${LINENO} | tee $OUTPUT/error-${PRGNAM}.log' ERR
+# Catch uninitialized variables
+set -u
+P1=${1:-1}
+
+# Save old umask and set to 0022:
+_UMASK_=$(umask)
+umask 0022
+
+# Create working directories
+mkdir -p $OUTPUT
+mkdir -p $TMP/tmp-$PRGNAM
+mkdir -p $PKG
+rm -rf $PKG/*
+rm -rf $TMP/tmp-$PRGNAM/*
+rm -rf $OUTPUT/{configure,make,install,error,makepkg}-$PRGNAM.log
+
+# Source file availability
+if ! [ -f ${SOURCE} ]; then
+  echo "Source '$(basename ${SOURCE})' not available yet..."
+  # Check if the $SRCDIR is writable at all - if not, download to $OUTPUT
+  [ -w "$SRCDIR" ] || SOURCE="$OUTPUT/$(basename $SOURCE)"
+  if [ -f ${SOURCE} ]; then echo "Ah, found it!"; continue; fi
+  if ! [ "x${SRCURL}" == "x" ]; then
+    echo "Will download file to $(dirname $SOURCE)"
+    wget -nv -T 20 -O "${SOURCE}" "${SRCURL}" || true
+    if [ $? -ne 0 -o ! -s "${SOURCE}" ]; then
+      echo "Downloading '$(basename ${SOURCE})' failed... aborting the build."
+      mv -f "${SOURCE}" "${SOURCE}".FAIL
+      exit 1
+    fi
+  else
+    echo "File '$(basename ${SOURCE})' not available... aborting the build."
+    exit 1
+  fi
+fi
+
+if [ "$P1" == "--download" ]; then
+  echo "Download complete."
+  exit 0
+fi
+
+# --- PACKAGE BUILDING ---
+
+echo "++"
+echo "|| $PRGNAM-$VERSION"
+echo "++"
+
+# Explode the package framework:
+if [ -f $SRCDIR/_$PRGNAM.tar.gz ]; then
+  cd $PKG
+  explodepkg $SRCDIR/_$PRGNAM.tar.gz
+  cd -
+fi
+
+cd $TMP/tmp-$PRGNAM
+echo "Extracting the source archive(s) for $PRGNAM..."
+if $(file ${SOURCE} | grep -qi ": 7-zip"); then
+  7za x ${SOURCE}
+elif $(file ${SOURCE} | grep -qi ": zip"); then
+  unzip ${SOURCE}
+else
+  tar -xvf ${SOURCE}
+fi
+cd ${PRGNAM}-${VERSION}
+chown -R root:root .
+chmod -R u+w,go+r-w,a+X-s .
+
+echo Building...
+LDFLAGS="$SLKLDFLAGS" \
+CXXFLAGS="$SLKCFLAGS" \
+CFLAGS="$SLKCFLAGS" \
+DSTBASE=/usr \
+make $NUMJOBS -f MakefileLinux 2>&1 | tee $OUTPUT/make-${PRGNAM}.log
+
+PUBLIC_HEADERS="CFArray.h CFBag.h CFBase.h CFBinaryHeap.h CFBitVector.h CFByteOrder.h CFCalendar.h CFCharacterSet.h CFData.h CFDate.h CFDateFormatter.h CFDictionary.h CFError.h CFLocale.h CFMachPort.h CFNumber.h CFNumberFormatter.h CFPreferences.h CFPropertyList.h CFSet.h CFString.h CFStringEncodingExt.h CFTimeZone.h CFTree.h CFURL.h CFURLAccess.h CFUUID.h CoreFoundation.h TargetConditionals.h"
+
+PRIVATE_HEADERS="CFCharacterSetPriv.h CFError_Private.h CFLogUtilities.h CFPriv.h CFRuntime.h CFStorage.h CFStringDefaultEncoding.h CFStringEncodingConverter.h CFStringEncodingConverterExt.h CFUniChar.h CFUnicodeDecomposition.h CFUnicodePrecomposition.h ForFoundationOnly.h"
+
+RESOURCES="CFCharacterSetBitmaps.bitmap CFUnicodeData-L.mapping CFUnicodeData-B.mapping"
+
+
+
+# install
+mkdir -p $PKG/usr/{include,share}/CoreFoundation
+mkdir -p $PKG/usr/lib
+cp -a $PRIVATE_HEADERS $PKG/usr/include/CoreFoundation
+cp -a $PUBLIC_HEADERS $PKG/usr/include/CoreFoundation
+cp -a CF-Objects/normal/libCoreFoundation.so $PKG/usr/lib
+cp -a $RESOURCES $PKG/usr/share/CoreFoundation
+cp -a TargetConditionals.h $PKG/usr/include
+
+# Add documentation:
+mkdir -p $PKG/usr/doc/$PRGNAM-$VERSION
+cp -a $DOCS $PKG/usr/doc/$PRGNAM-$VERSION || true
+cat $SRCDIR/$(basename $0) > $PKG/usr/doc/$PRGNAM-$VERSION/$PRGNAM.SlackBuild
+chown -R root:root $PKG/usr/doc/$PRGNAM-$VERSION
+find $PKG/usr/doc -type f -exec chmod 644 {} \;
+
+# Strip binaries
+find $PKG | xargs file | grep -e "executable" -e "shared object" | grep ELF \
+  | cut -f 1 -d : | xargs strip --strip-unneeded 2> /dev/null || true
+
+# Add a package description:
+mkdir -p $PKG/install
+cat $SRCDIR/slack-desc > $PKG/install/slack-desc
+if [ -f $SRCDIR/doinst.sh ]; then
+  cat $SRCDIR/doinst.sh >> $PKG/install/doinst.sh
+fi
+
+# Build the package
+cd $PKG
+makepkg -l y -c n $OUTPUT/${PRGNAM}-${VERSION}-${ARCH}-${BUILD}${TAG}.${PKGTYPE:-txz} 2>&1 | tee $OUTPUT/makepkg-${PRGNAM}.log
+cd $OUTPUT
+md5sum ${PRGNAM}-${VERSION}-${ARCH}-${BUILD}${TAG}.${PKGTYPEL-txz} > ${PRGNAM}-${VERSION}-${ARCH}-${BUILD}${TAG}.${PKGTYPE:-txz}.md5
+cd -
+cat $PKG/install/slack-desc | grep "^${PRGNAM}" > $OUTPUT/${PRGNAM}-${VERSION}-${ARCH}-${BUILD}${TAG}.txt
+
+# Restore the original umask
+umask ${_UMASK_}

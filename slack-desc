@@ -1,0 +1,20 @@
+# HOW TO EDIT THIS FILE:
+# The "handy ruler" below makes it easier to edit a package description.  Line
+# up the first '|' above the ':' following the base package name, and the '|'
+# on the right side marks the last column you can put a character in.  You must
+# make exactly 11 lines for the formatting to be correct.  It's also
+# customary to leave one space after the ':'.
+
+  |-----handy-ruler------------------------------------------------------|
+CF: CF (CFLite)
+CF:
+CF: CFLite is an open source version of the CoreFoundation framework
+CF: found on Mac OS X and iOS. It is designed to be simple and
+CF: portable. For example, it can be used on other platforms to read
+CF: and write property lists that may come from Mac OS X or iOS.  It is
+CF: important to note that this version is not the exact same version as
+CF: is used on Mac OS X or iOS, but they do share a significant amount
+CF: of code.
+CF:
+CF: Home: http://opensource.apple.com/
+
